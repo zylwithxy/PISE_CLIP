@@ -34,7 +34,7 @@ Data preparation for images and keypoints can follow [Pose Transfer](https://git
 # Train
 
 ```
-python train.py --name=fashion --model=painet --gpu_ids=0
+bash ./scripts/train.sh
 ```
 **Note that if you want to train a pose transfer model as well as texture transfer and region editing, just comments the line 177 and 178, and uncomments line 162-176.**
 
@@ -55,21 +55,6 @@ Pre-Trained checkpoint of texture transfe, region editing, style interpolation u
 python test.py --name=fashion --model=painet --gpu_ids=0 
 ```
 
-
-# Citation
-
-If you use this code, please cite our paper.
-
-```
-@InProceedings{Zhang_2021_CVPR,
-    author    = {Zhang, Jinsong and Li, Kun and Lai, Yu-Kun and Yang, Jingyu},
-    title     = {{PISE}: Person Image Synthesis and Editing With Decoupled GAN},
-    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-    month     = {June},
-    year      = {2021},
-    pages     = {7982-7990}
-}
-```
 
 # Acknowledgments
 
