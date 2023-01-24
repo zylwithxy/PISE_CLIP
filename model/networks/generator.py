@@ -55,14 +55,18 @@ class ParsingNet(nn.Module):
 
 class PoseGenerator(BaseNetwork):
     def __init__(self, image_nc=3, structure_nc=18, output_nc=3, ngf=64, norm='instance', 
-                activation='LeakyReLU', use_spect=True, use_coord=False):
+                activation='LeakyReLU', use_spect=True, use_coord=False, use_reduc_layer= False):
         super(PoseGenerator, self).__init__()
-
 
         self.use_coordconv = True
         self.match_kernel = 3
+        self.use_reduc_layer = use_reduc_layer
         
-        self.parnet = ParsingNet(8+18*2+512, 8)
+        if use_reduc_layer:
+            self.linear = nn.Linear(512, 8)
+        
+        input_feature_num = 8+18*2+8 if use_reduc_layer else 8+18*2+512
+        self.parnet = ParsingNet(input_feature_num, 8)
         
         
 
@@ -92,6 +96,8 @@ class PoseGenerator(BaseNetwork):
         SPL2_onehot = SPL2_onehot.permute(0, 3, 1, 2)
         par2 = SPL2_onehot
         '''
+        if self.use_reduc_layer:
+            text1 = self.linear(text1.float())
         b, embed_dim = text1.shape
         h, w = par1.shape[-2:]
         parcode, _ = self.parnet(torch.cat((par1, pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))

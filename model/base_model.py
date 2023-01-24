@@ -6,6 +6,7 @@ from util import util, pose_utils
 from model.networks import base_function
 import matplotlib.pyplot as plt
 from typing import Dict, Tuple, Union
+from util import util
 
 
 class BaseModel():
@@ -13,7 +14,8 @@ class BaseModel():
         self.opt = opt
         self.gpu_ids = opt.gpu_ids
         self.isTrain = opt.isTrain
-        self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
+        self.save_dir = os.path.join(opt.expr_dir, 'save_models')
+        util.mkdirs(self.save_dir)
         self.loss_names = []
         self.model_names = []
         self.visual_names = []
