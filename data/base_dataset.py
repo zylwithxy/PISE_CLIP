@@ -12,6 +12,7 @@ import torch
 import math
 import numbers
 import clip
+from util import util
 
 class BaseDataset(data.Dataset):
     def __init__(self):
@@ -22,6 +23,8 @@ class BaseDataset(data.Dataset):
         parser.add_argument('--angle', type=float, default=False)
         parser.add_argument('--shift', type=float, default=False)
         parser.add_argument('--scale', type=float, default=False)
+        parser.add_argument('--use_text', type= util.str2bool, default= True, help= "whether to use CLIP text embeddings")
+        parser.add_argument('--mask_choice', type= str, default= 'both', choices=['upper_clothes', 'both', 'wo'], help= "choose the masked part of the segmentation map. upper_clothes means masking the upper clothing; both means masking the upper clothing and arms; wo means without masking")
         return parser
 
     def initialize(self, opt):
@@ -46,7 +49,29 @@ class BaseDataset(data.Dataset):
 
         self.annotation_file = pd.read_csv(self.bone_file, sep=':')
         self.annotation_file = self.annotation_file.set_index('name')
+        
+        # For the masked choice.
+    
+    def masked_choice(self, choice: str, temp: torch.Tensor) -> None:
+        """Masking choice and modify the value of temp in-place.
 
+        Args:
+            choice (str): ['upper_clothes', 'both', 'wo']
+            temp (torch.Tensor): 
+        """
+        if choice == 'upper_clothes':
+            temp[temp == 3] = 0
+            pass
+        elif choice == 'both':
+            temp[temp == 3] = 0
+            temp[temp == 6] = 0
+            pass
+        elif choice == 'wo':
+            pass
+        else:
+            raise ValueError('The choice must be in the expression [\'upper_clothes\', \'both\', \'wo\']')   
+        
+        
     def get_paths(self, opt):
         label_paths = []
         image_paths = []
@@ -125,8 +150,9 @@ class BaseDataset(data.Dataset):
 
 
         tmp = torch.from_numpy(SPL1_img).view( -1).long()
-        tmp[tmp == 3] = 0
-        tmp[tmp == 6] = 0 # masked the upper clothes and arms
+        self.masked_choice(self.opt.mask_choice, tmp)
+        # tmp[tmp == 3] = 0 # masked the upper clothes
+        # tmp[tmp == 6] = 0 # masked arms
         
         ones = torch.sparse.torch.eye(num_class)
         ones = ones.index_select(0, tmp)
@@ -139,14 +165,15 @@ class BaseDataset(data.Dataset):
         SPL1_tensor_mask = torch.zeros_like(SPL1_img_temp ,dtype= SPL1_img_temp.dtype) # Create mask
         SPL1_tensor_mask.copy_(SPL1_img_temp.data)
         
-        SPL1_tensor_mask[SPL1_tensor_mask == 3] = 0
-        SPL1_tensor_mask[SPL1_tensor_mask == 6] = 0
+        self.masked_choice(self.opt.mask_choice, SPL1_tensor_mask)
+        # SPL1_tensor_mask[SPL1_tensor_mask == 3] = 0 # For upper clothing
+        # SPL1_tensor_mask[SPL1_tensor_mask == 6] = 0 # For arms
 
         #print(SPL1.shape)
         SPL2 = torch.from_numpy(SPL2_img).long()
         
         # Read the text
-        txt = self.shape_text[self.fname_shape_pair[P1_name]] # TXT1_complement
+        txt = self.shape_text[self.fname_shape_pair[P1_name]] if self.opt.use_text else 'without text'# TXT1_complement
         # token_txt = clip.tokenize(txt).cuda()
         # TXT1_complement = self.model_clip.encode_text(token_txt)
         
