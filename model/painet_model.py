@@ -14,9 +14,6 @@ import clip
 
 import torch.nn.functional as F
 
-def str2bool(string: str):
-    
-    return True if string == 'True' else False
 
 class Painet(BaseModel): # which is only for parsing models
     def name(self):
@@ -31,7 +28,7 @@ class Painet(BaseModel): # which is only for parsing models
         parser.add_argument('--use_spect_g', action='store_false', help="whether use spectral normalization in generator")
         # parser.add_argument('--use_spect_d', action='store_false', help="whether use spectral normalization in discriminator")
         parser.add_argument('--save_input', action='store_false', help="whether save the input images when testing")
-        parser.add_argument('--use_reduc_layer', type= str2bool, default= True, help="whether to use reduction layer")
+        parser.add_argument('--use_reduc_layer', type= util.str2bool, default= True, help="whether to use reduction layer")
 
         parser.set_defaults(use_spect_g=False)
         # parser.set_defaults(use_spect_d=True)
@@ -52,10 +49,11 @@ class Painet(BaseModel): # which is only for parsing models
         # define the generator
         use_reduc_layer = opt.use_reduc_layer # 
         self.net_G = network.define_g(opt, image_nc=opt.image_nc, structure_nc=opt.structure_nc, ngf=64,
-                                 use_spect=opt.use_spect_g, norm='instance', activation='LeakyReLU', use_reduc_layer= use_reduc_layer) # only for the segmentation model
+                                 use_spect=opt.use_spect_g, norm='instance', activation='LeakyReLU', use_reduc_layer= use_reduc_layer, use_text= opt.use_text) # only for the segmentation model
 
         # define the CLIP
-        self.model_clip, _ = clip.load("ViT-B/32", device= 'cuda')
+        if opt.use_text:
+            self.model_clip, _ = clip.load("ViT-B/32", device= 'cuda')
         
         trained_list = ['parnet']
         for k,v in self.net_G.named_parameters():
@@ -97,7 +95,7 @@ class Painet(BaseModel): # which is only for parsing models
             self.input_BP2 = input_BP2.cuda(self.gpu_ids[0])  
             self.input_SPL2 = input_SPL2.cuda(self.gpu_ids[0])  
             self.label_P2 = label_P2.cuda(self.gpu_ids[0])
-            self.input_TXT1 = self.model_clip.encode_text(clip.tokenize(self.show_TXT).cuda())
+            self.input_TXT1 = self.model_clip.encode_text(clip.tokenize(self.show_TXT).cuda()) if hasattr(self, 'model_clip') else None
             
 
         self.image_paths=[]
