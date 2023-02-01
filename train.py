@@ -22,6 +22,8 @@ if __name__ == '__main__':
     keep_training = True
     max_iteration = opt.niter+opt.niter_decay
     epoch = 0
+    total_epoch = max_iteration // (len(dataset) // opt.batchSize + 1) + 1
+    
     total_iteration = opt.iter_count
     
     pbar = tqdm(total= max_iteration)
@@ -49,7 +51,7 @@ if __name__ == '__main__':
             if total_iteration % opt.print_freq == 0:
                 losses = model.get_current_errors()
                 t = (time.time() - iter_start_time) / opt.batchSize
-                visualizer.print_current_errors(epoch, total_iteration, losses, t)
+                visualizer.print_current_errors(epoch, total_epoch, total_iteration, losses, t)
                 if opt.display_id > 0:
                     visualizer.plot_current_errors(total_iteration, losses)
 
