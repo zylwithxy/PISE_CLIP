@@ -1,7 +1,11 @@
-python train.py --name=parsing_net_reduc \
+python train.py --name=parsing_net_reduc_wo_text \
                 --model=painet \
                 --gpu_ids=1 \
                 --dataroot /media/beast/WD2T/XUEYu/dataset_pose_transfer/Pose_transfer_codes/deepfashion \
                 --batchSize 8 \
                 --niter 750000 \
-                --display_freq 200
+                --display_freq 200 \
+                --use_reduc_layer True \
+                --use_text False \
+                --mask_choice upper_clothes \
+                --nThreads 16
