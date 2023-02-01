@@ -11,7 +11,7 @@ if __name__ == '__main__':
     opt = TrainOptions().parse()
     # create a dataset
     dataset = Dataset.create_dataloader(opt)
-    dataset_size = len(dataset) * opt.batchSize
+    dataset_size = len(dataset) * opt.batchSize # total_iteration += 1 which is equal to datasize += opt.batchSize
     print('training images = %d' % dataset_size)
     # create a model
     model = create_model(opt)
