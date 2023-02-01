@@ -361,3 +361,8 @@ def get_iteration(dir_name, file_name, net_name):
         model_name = file_name
     iterations = int(model_name.replace('_net_'+net_name+'.pth', ''))
     return iterations
+
+
+def str2bool(string: str):
+    
+    return True if string == 'True' else False
