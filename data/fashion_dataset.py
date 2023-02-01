@@ -48,7 +48,7 @@ class FashionDataset(BaseDataset):
         
         self.check_file_path(image_dir, bonesLst, par_dir, shape_file_path)
         
-        fname_shape_pair = self.read_shape0_file(shape_file_path)
+        fname_shape_pair = self.read_shape0_file(shape_file_path) if self.opt.use_text else None
         
         # model_clip, preprocess = clip.load("ViT-B/32", device= 'cuda') # do not need preprocess temporarily.
         
