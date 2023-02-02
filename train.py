@@ -11,7 +11,7 @@ if __name__ == '__main__':
     opt = TrainOptions().parse()
     # create a dataset
     dataset = Dataset.create_dataloader(opt)
-    dataset_size = len(dataset) * opt.batchSize # total_iteration += 1 which is equal to datasize += opt.batchSize
+    dataset_size = len(dataset) * opt.batchSize # len(dataset) == len(base_dataset) // opt.batchSize
     print('training images = %d' % dataset_size)
     # create a model
     model = create_model(opt)
@@ -22,7 +22,7 @@ if __name__ == '__main__':
     keep_training = True
     max_iteration = opt.niter+opt.niter_decay
     epoch = 0
-    total_epoch = max_iteration // (len(dataset) // opt.batchSize + 1) + 1
+    total_epoch = max_iteration // (len(dataset) + 1) + 1
     
     total_iteration = opt.iter_count
     
