@@ -21,12 +21,13 @@ if __name__ == '__main__':
     # training flag
     keep_training = True
     max_iteration = opt.niter+opt.niter_decay
-    epoch = 0
+    
+    epoch = 0 if not opt.continue_train else model.opt.iter_count // (len(dataset) + 1)
     total_epoch = max_iteration // (len(dataset) + 1) + 1
     
-    total_iteration = opt.iter_count
+    total_iteration = opt.iter_count if not opt.continue_train else model.opt.iter_count
     
-    pbar = tqdm(total= max_iteration)
+    pbar = tqdm(total= max_iteration - total_iteration)
 
     # training process
     while(keep_training):
