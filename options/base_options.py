@@ -111,7 +111,7 @@ class BaseOptions():
 
         # save to the disk
         expr_dir = os.path.join(opt.checkpoints_dir, opt.name)
-        if os.path.exists(expr_dir):
+        if os.path.exists(expr_dir) and not opt.continue_train:
             fnum = len(glob.glob(os.path.join(opt.checkpoints_dir, opt.name + "*"))) + 1
             fname = opt.name + f'_{fnum}'
             expr_dir = os.path.join(opt.checkpoints_dir, fname)
@@ -121,6 +121,17 @@ class BaseOptions():
             file_name = os.path.join(expr_dir, 'train_opt.txt')
         else:
             file_name = os.path.join(expr_dir, 'test_opt.txt')
+            
+        if opt.continue_train:
+            opt_file_name = os.path.splitext(os.path.basename(file_name))[0] + '_continue.txt'
+            file_name = os.path.join(expr_dir, opt_file_name)
+            
+            if os.path.exists(file_name):
+                opt_fnum = len(glob.glob(os.path.join(expr_dir, opt_file_name[:-4] + "*"))) + 1
+                opt_file_name = os.path.splitext(os.path.basename(file_name))[0] + f'_continue{opt_fnum}.txt'
+                file_name = os.path.join(expr_dir, opt_file_name)
+            
+        
         with open(file_name, 'wt') as opt_file:
             opt_file.write('--------------Options--------------\n')
             for k, v in sorted(vars(opt).items()):
