@@ -56,7 +56,7 @@ class ParsingNet(nn.Module):
 
 class PoseGenerator(BaseNetwork):
     def __init__(self, image_nc=3, structure_nc=18, output_nc=3, ngf=64, norm='instance', 
-                activation='LeakyReLU', use_spect=True, use_coord=False, use_reduc_layer= False, use_text= False):
+                activation='LeakyReLU', use_spect=True, use_coord=False, use_reduc_layer= False, use_text= False, use_masked_SPL1= True):
         super(PoseGenerator, self).__init__()
 
         self.use_coordconv = True
@@ -68,12 +68,13 @@ class PoseGenerator(BaseNetwork):
         
         input_feature_num = 8+18*2+8 if use_reduc_layer else 8+18*2+512
         input_feature_num = input_feature_num if use_text else 8+18*2
+        input_feature_num = input_feature_num if use_masked_SPL1 else input_feature_num - 8
         
         self.parnet = ParsingNet(input_feature_num, 8)
         
         
 
-    def forward(self, pose1, pose2, par1, text1: Union[torch.Tensor, None]):
+    def forward(self, pose1, pose2, par1: Union[torch.Tensor, None], text1: Union[torch.Tensor, None]):
         """_summary_
 
         Args:
@@ -102,13 +103,19 @@ class PoseGenerator(BaseNetwork):
         if text1 is None:
             
             h, w = par1.shape[-2:]
-            parcode, _ = self.parnet(torch.cat((par1, pose1, pose2),1))
-            
+            if par1 is not None:
+                parcode, _ = self.parnet(torch.cat((par1, pose1, pose2),1))
+            else:
+                parcode, _ = self.parnet(torch.cat((pose1, pose2),1))
         else:
             if self.use_reduc_layer:
                 text1 = self.linear(text1.float())
             b, embed_dim = text1.shape
-            h, w = par1.shape[-2:]
-            parcode, _ = self.parnet(torch.cat((par1, pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
-
+            if par1 is not None:
+                h, w = par1.shape[-2:]
+                parcode, _ = self.parnet(torch.cat((par1, pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
+            else:
+                h, w = pose1.shape[-2:]
+                parcode, _ = self.parnet(torch.cat((pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
+            
         return parcode

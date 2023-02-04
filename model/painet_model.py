@@ -40,7 +40,10 @@ class Painet(BaseModel): # which is only for parsing models
         BaseModel.__init__(self, opt)
         self.loss_names = ['par', 'par1'] # only for parsing models
 
-        self.visual_names = ['input_BP1', 'show_SPL1', 'input_BP2', 'parsav', 'label_P2'] # [:3 [input], 'Generated segmentation map', 'True segmentation map']
+        if opt.use_masked_SPL1:
+            self.visual_names = ['input_BP1', 'show_SPL1', 'input_BP2', 'parsav', 'label_P2'] # [:3 [input], 'Generated segmentation map', 'True segmentation map']
+        else:
+            self.visual_names = ['input_BP1', 'input_BP2', 'parsav', 'label_P2']
         self.model_names = ['G'] # 
 
         self.FloatTensor = torch.cuda.FloatTensor if len(self.gpu_ids)>0 \
@@ -49,7 +52,7 @@ class Painet(BaseModel): # which is only for parsing models
         # define the generator
         use_reduc_layer = opt.use_reduc_layer # 
         self.net_G = network.define_g(opt, image_nc=opt.image_nc, structure_nc=opt.structure_nc, ngf=64,
-                                 use_spect=opt.use_spect_g, norm='instance', activation='LeakyReLU', use_reduc_layer= use_reduc_layer, use_text= opt.use_text) # only for the segmentation model
+                                 use_spect=opt.use_spect_g, norm='instance', activation='LeakyReLU', use_reduc_layer= use_reduc_layer, use_text= opt.use_text, use_masked_SPL1= opt.use_masked_SPL1) # only for the segmentation model
 
         # define the CLIP
         if opt.use_text:
@@ -83,14 +86,18 @@ class Painet(BaseModel): # which is only for parsing models
 
     def set_input(self, input):
         # move to GPU and change data types
-        self.input = input
-        input_P1, input_BP1, input_SPL1, self.show_SPL1, self.show_TXT = input['P1'], input['BP1'], input['SPL1_masked'], input['SPL1_img'], input['TEXT']
-        input_P2, input_BP2, input_SPL2, label_P2 = input['P2'], input['BP2'], input['SPL2'], input['label_P2']
+        # self.input = input
+        if self.opt.use_masked_SPL1:
+            input_P1, input_BP1, input_SPL1, self.show_SPL1, self.show_TXT = input['P1'], input['BP1'], input['SPL1_masked'], input['SPL1_img'], input['TEXT']
+            input_P2, input_BP2, input_SPL2, label_P2 = input['P2'], input['BP2'], input['SPL2'], input['label_P2']
+        else:
+            input_P1, input_BP1, self.show_TXT = input['P1'], input['BP1'], input['TEXT']
+            input_P2, input_BP2, input_SPL2, label_P2 = input['P2'], input['BP2'], input['SPL2'], input['label_P2']
 
         if len(self.gpu_ids) > 0:
             self.input_P1 = input_P1.cuda(self.gpu_ids[0])
             self.input_BP1 = input_BP1.cuda(self.gpu_ids[0])
-            self.input_SPL1 = input_SPL1.cuda(self.gpu_ids[0])
+            self.input_SPL1 = input_SPL1.cuda(self.gpu_ids[0]) if self.opt.use_masked_SPL1 else None
             self.input_P2 = input_P2.cuda(self.gpu_ids[0])
             self.input_BP2 = input_BP2.cuda(self.gpu_ids[0])  
             self.input_SPL2 = input_SPL2.cuda(self.gpu_ids[0])  

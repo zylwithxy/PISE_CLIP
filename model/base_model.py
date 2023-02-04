@@ -104,7 +104,7 @@ class BaseModel():
         
         return_dict: OrderedDict[str, np.ndarray] = OrderedDict()
         height, width = visual_ret[self.visual_names[0]].shape[:2]
-        full_vis = np.ones((height, width*5, 3)).astype(np.uint8) # h, w, c  These 5 images all have 3 feature channels.
+        full_vis = np.ones((height, width* len(self.visual_names), 3)).astype(np.uint8) # h, w, c  These 5 images all have 3 feature channels.
 
         for index, img_np in enumerate(visual_ret.values()):
             full_vis[:, index * width:(index + 1) * width, :] = img_np
