@@ -102,7 +102,7 @@ class PoseGenerator(BaseNetwork):
         '''
         if text1 is None:
             
-            h, w = par1.shape[-2:]
+            h, w = pose1.shape[-2:]
             if par1 is not None:
                 parcode, _ = self.parnet(torch.cat((par1, pose1, pose2),1))
             else:
