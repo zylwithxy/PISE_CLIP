@@ -52,7 +52,7 @@ Pre-Trained checkpoint of texture transfe, region editing, style interpolation u
 
 
 ```
-python test.py --name=fashion --model=painet --gpu_ids=0 
+bash ./scripts/test.sh
 ```
 
 
