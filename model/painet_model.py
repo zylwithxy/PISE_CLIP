@@ -67,11 +67,13 @@ class Painet(BaseModel): # which is only for parsing models
             if flag:
                 #v.requires_grad = False
                 print(k)
-                
+        
+        self.L1loss = torch.nn.L1Loss()
+        self.parLoss = CrossEntropyLoss2d()#torch.nn.BCELoss()
+             
         if self.isTrain:
             # define the loss functions
-            self.L1loss = torch.nn.L1Loss()
-            self.parLoss = CrossEntropyLoss2d()#torch.nn.BCELoss()
+            
 
             # define the optimizer
             self.optimizer_G = torch.optim.Adam(itertools.chain(
@@ -124,6 +126,12 @@ class Painet(BaseModel): # which is only for parsing models
     def test(self):
         """Forward function used in test time"""
         self.parsav  = self.net_G(self.input_BP1, self.input_BP2, self.input_SPL1, self.input_TXT1)
+        
+        # parsing loss
+        label_P2 = self.label_P2.squeeze(1).long()
+        #print(self.input_SPL2.min(), self.input_SPL2.max(), self.parsav.min(), self.parsav.max())
+        self.loss_par = self.parLoss(self.parsav,label_P2)# * 20. 
+        self.loss_par1 = self.L1loss(self.parsav, self.input_SPL2)  * 100
         ## test flow ##
         
         """

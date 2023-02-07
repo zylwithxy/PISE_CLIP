@@ -14,8 +14,9 @@ class BaseModel():
         self.opt = opt
         self.gpu_ids = opt.gpu_ids
         self.isTrain = opt.isTrain
-        self.save_dir = os.path.join(opt.expr_dir, 'save_models')
-        util.mkdirs(self.save_dir)
+        self.save_dir = os.path.join(opt.expr_dir, 'save_models') if self.isTrain else os.path.join(opt.checkpoints_dir, opt.name, 'save_models') # For train, save models in self.save_dir; For test, read models in self.save_dir
+        if self.isTrain:
+            util.mkdirs(self.save_dir)
         self.loss_names = []
         self.model_names = []
         self.visual_names = []

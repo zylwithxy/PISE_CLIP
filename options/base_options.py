@@ -110,11 +110,12 @@ class BaseOptions():
         print('----------------End----------------')
 
         # save to the disk
-        expr_dir = os.path.join(opt.checkpoints_dir, opt.name)
+        expr_dir = os.path.join(opt.checkpoints_dir, opt.name) if opt.isTrain else os.path.join(opt.results_dir, opt.name)
         if os.path.exists(expr_dir) and not opt.continue_train:
-            fnum = len(glob.glob(os.path.join(opt.checkpoints_dir, opt.name + "*"))) + 1
+            root_result_dir = opt.checkpoints_dir if opt.isTrain else opt.results_dir
+            fnum = len(glob.glob(os.path.join(root_result_dir, opt.name + "*"))) + 1
             fname = opt.name + f'_{fnum}'
-            expr_dir = os.path.join(opt.checkpoints_dir, fname)
+            expr_dir = os.path.join(root_result_dir, fname)
             
         util.mkdirs(expr_dir)
         if opt.isTrain:

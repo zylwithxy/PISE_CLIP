@@ -8,9 +8,10 @@ from . import html
 
 class Visualizer():
     def __init__(self, opt):
-        # self.opt = opt
+        self.opt = opt
         self.display_id = opt.display_id
         self.use_html = opt.isTrain and not opt.no_html
+        self.record_test = not opt.isTrain and opt.phase == 'test'
         self.win_size = opt.display_winsize
         self.name = opt.name
         if self.display_id > 0:
@@ -18,16 +19,22 @@ class Visualizer():
             self.vis = visdom.Visdom(port=opt.display_port, env=opt.display_env)
             self.display_single_pane_ncols = opt.display_single_pane_ncols
 
-        if self.use_html:
+        if self.use_html or self.record_test:
             self.web_dir = os.path.join(opt.expr_dir, 'web')
             self.img_dir = os.path.join(self.web_dir, 'images')
             print('create web directory %s...' % self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
         self.log_name = os.path.join(opt.expr_dir, 'loss_log.txt')
         self.eval_log_name = os.path.join(opt.expr_dir, 'eval_log.txt')
-        with open(self.log_name, "a") as log_file:
-            now = time.strftime("%c")
-            log_file.write('================ Training Loss (%s) ================\n' % now)
+        
+        if opt.isTrain:
+            with open(self.log_name, "a") as log_file:
+                now = time.strftime("%c")
+                log_file.write('================ Training Loss (%s) ================\n' % now)
+        else: # Testing
+            with open(self.eval_log_name, "a") as log_file:
+                now = time.strftime("%c")
+                log_file.write('================ Testing Loss (%s) ================\n' % now)
 
     # |visuals|: dictionary of images to display or save
     def display_current_results(self, visuals: dict, text: str, epoch: int):
@@ -73,7 +80,7 @@ class Visualizer():
                                        win=self.display_id + idx)
                     idx += 1
 
-        if self.use_html: # save images to a html file
+        if self.use_html or self.record_test: # save images to a html file
             for label, image_numpy in visuals.items():
                 img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.png' % (epoch, label))
                 util.save_image(image_numpy, text, img_path)
@@ -145,8 +152,8 @@ class Visualizer():
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)
 
-    def print_current_eval(self, epoch, i, score):
-        message = '(epoch: %d, iters: %d)' % (epoch, i)
+    def print_current_eval(self, epoch: int, score: dict, t):
+        message = '(epoch: %d, time: %.3f) ' % (epoch, t)
         for k, v in score.items():
             message += '%s: %.3f ' % (k, v)
 
