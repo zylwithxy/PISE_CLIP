@@ -29,6 +29,17 @@ class Painet(BaseModel): # which is only for parsing models
         # parser.add_argument('--use_spect_d', action='store_false', help="whether use spectral normalization in discriminator")
         parser.add_argument('--save_input', action='store_false', help="whether save the input images when testing")
         parser.add_argument('--use_reduc_layer', type= util.str2bool, default= True, help="whether to use reduction layer")
+        parser.add_argument('--parsing_net_choice', type= str, default= 'ParsingNet', choices=['ParsingNet', 'ShapeUNet_FCNHead'], help= "choose the masked part of the segmentation map. upper_clothes means masking the upper clothing; both means masking the upper clothing and arms; wo means without masking")
+        
+        temp = parser.parse_args() # For the parsing_net_choice
+        if temp.parsing_net_choice == 'ParsingNet':
+            pass
+        elif temp.parsing_net_choice == 'ShapeUNet_FCNHead':
+            parser.add_argument('--encoder_attr_embedding', type=int, default=512, help='The dim of CLIP text embeddings')
+            parser.add_argument('--encoder_in_channels', type=int, default=44, help='The dim of condition like pose1 + pose2 + segmentation_map')
+            parser.add_argument('--encoder_in_channels', type=int, default=44, help='The dim of condition like pose1 + pose2 + segmentation_map')
+            
+            pass
 
         parser.set_defaults(use_spect_g=False)
         # parser.set_defaults(use_spect_d=True)
@@ -52,7 +63,8 @@ class Painet(BaseModel): # which is only for parsing models
         # define the generator
         use_reduc_layer = opt.use_reduc_layer # 
         self.net_G = network.define_g(opt, image_nc=opt.image_nc, structure_nc=opt.structure_nc, ngf=64,
-                                 use_spect=opt.use_spect_g, norm='instance', activation='LeakyReLU', use_reduc_layer= use_reduc_layer, use_text= opt.use_text, use_masked_SPL1= opt.use_masked_SPL1) # only for the segmentation model
+                                 use_spect=opt.use_spect_g, norm='instance', activation='LeakyReLU', use_reduc_layer= use_reduc_layer, use_text= opt.use_text, 
+                                 use_masked_SPL1= opt.use_masked_SPL1, parsing_net_choice= opt.parsing_net_choice) # only for the segmentation model
 
         # define the CLIP
         if opt.use_text:

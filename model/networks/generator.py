@@ -56,21 +56,31 @@ class ParsingNet(nn.Module):
 
 class PoseGenerator(BaseNetwork):
     def __init__(self, image_nc=3, structure_nc=18, output_nc=3, ngf=64, norm='instance', 
-                activation='LeakyReLU', use_spect=True, use_coord=False, use_reduc_layer= False, use_text= False, use_masked_SPL1= True):
+                activation='LeakyReLU', use_spect=True, use_coord=False, use_reduc_layer= False, 
+                use_text= False, use_masked_SPL1= True, parsing_net_choice= 'ParsingNet', 
+                ShapeUNet_FCNHead: dict= None):
         super(PoseGenerator, self).__init__()
 
         self.use_coordconv = True
         self.match_kernel = 3
         self.use_reduc_layer = use_reduc_layer
         
+        
+        
         if use_reduc_layer:
+            assert parsing_net_choice == 'ParsingNet'
             self.linear = nn.Linear(512, 8)
         
         input_feature_num = 8+18*2+8 if use_reduc_layer else 8+18*2+512
         input_feature_num = input_feature_num if use_text else 8+18*2
         input_feature_num = input_feature_num if use_masked_SPL1 else input_feature_num - 8
         
-        self.parnet = ParsingNet(input_feature_num, 8)
+        if parsing_net_choice == 'ParsingNet':
+            self.parnet = ParsingNet(input_feature_num, 8)
+        elif parsing_net_choice == 'ShapeUNet_FCNHead':
+            # self.parnet = ShapeUNet_FCNHead_model
+            # param == 
+            pass
         
         
 
