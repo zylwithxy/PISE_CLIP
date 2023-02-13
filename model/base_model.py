@@ -105,10 +105,18 @@ class BaseModel():
         
         return_dict: OrderedDict[str, np.ndarray] = OrderedDict()
         height, width = visual_ret[self.visual_names[0]].shape[:2]
-        full_vis = np.ones((height, width* len(self.visual_names), 3)).astype(np.uint8) # h, w, c  These 5 images all have 3 feature channels.
+        
+        if self.opt.seg_map_visual_choice == 'horizontal':
+            full_vis = np.ones((height, width* len(self.visual_names), 3)).astype(np.uint8) # h, w, c  These 5 images all have 3 feature channels.
+        elif self.opt.seg_map_visual_choice == 'vertical':
+            full_vis = np.ones((height * len(self.visual_names), width, 3)).astype(np.uint8)
 
         for index, img_np in enumerate(visual_ret.values()):
-            full_vis[:, index * width:(index + 1) * width, :] = img_np
+            if self.opt.seg_map_visual_choice == 'horizontal':
+                full_vis[:, index * width:(index + 1) * width, :] = img_np
+            elif self.opt.seg_map_visual_choice == 'vertical':
+                full_vis[index * height:(index + 1) * height, :, :] = img_np
+                
             
         return_dict[self.get_image_paths()[0]] = full_vis # 0 for a batch
     

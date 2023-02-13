@@ -26,6 +26,7 @@ class BaseDataset(data.Dataset):
         parser.add_argument('--use_text', type= util.str2bool, default= True, help= "whether to use CLIP text embeddings")
         parser.add_argument('--mask_choice', type= str, default= 'both', choices=['upper_clothes', 'both', 'wo'], help= "choose the masked part of the segmentation map. upper_clothes means masking the upper clothing; both means masking the upper clothing and arms; wo means without masking")
         parser.add_argument('--use_masked_SPL1', type= util.str2bool, default= True, help= "whether to use masked segmentation map of pose 1")
+        parser.add_argument('--seg_map_visual_choice', type= str, default= 'horizontal', choices=['horizontal', 'vertical'], help= "choose the way for visualizing seg map in test set")
         return parser
 
     def initialize(self, opt):
@@ -210,6 +211,7 @@ class BaseDataset(data.Dataset):
         
         # SPL1_tensor_mask[SPL1_tensor_mask == 3] = 0 # For upper clothing
         # SPL1_tensor_mask[SPL1_tensor_mask == 6] = 0 # For arms
+        # SPL1_tensor_mask[SPL1_tensor_mask == 5] = 0 # For lower clothing
 
         #print(SPL1.shape)
         

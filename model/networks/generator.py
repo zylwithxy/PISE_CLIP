@@ -58,12 +58,13 @@ class PoseGenerator(BaseNetwork):
     def __init__(self, image_nc=3, structure_nc=18, output_nc=3, ngf=64, norm='instance', 
                 activation='LeakyReLU', use_spect=True, use_coord=False, use_reduc_layer= False, 
                 use_text= False, use_masked_SPL1= True, parsing_net_choice= 'ParsingNet', 
-                ShapeUNet_FCNHead: dict= None):
+                stage_choice= 'stage1'):
         super(PoseGenerator, self).__init__()
 
         self.use_coordconv = True
         self.match_kernel = 3
         self.use_reduc_layer = use_reduc_layer
+        self.stage_choice = stage_choice 
         
         
         
@@ -82,9 +83,61 @@ class PoseGenerator(BaseNetwork):
             # param == 
             pass
         
+        if stage_choice == 'stage_12':
+            self.define_networks(norm, activation, ngf)
         
 
-    def forward(self, pose1, pose2, par1: Union[torch.Tensor, None], text1: Union[torch.Tensor, None]):
+    def define_networks(self, norm, activation, ngf):
+        
+        norm_layer = get_norm_layer(norm_type=norm)
+        nonlinearity = get_nonlinearity_layer(activation_type=activation)
+        
+        self.Zencoder = Zencoder(3, ngf)
+        
+        self.imgenc = VggEncoder()
+        self.getMatrix = GetMatrix(ngf*4, 1)
+        
+        self.phi = nn.Conv2d(in_channels=ngf*4+3, out_channels=ngf*4, kernel_size=1, stride=1, padding=0)
+        self.theta = nn.Conv2d(in_channels=ngf*4+3, out_channels=ngf*4, kernel_size=1, stride=1, padding=0)
+
+        self.parenc = HardEncoder(8+18+8+3, ngf)
+
+        self.dec = BasicDecoder(3)
+
+        self.efb = EFB(ngf*4, 256)
+        self.res = ResBlock(ngf*4, output_nc=ngf*4, hidden_nc=ngf*4, norm_layer=norm_layer, nonlinearity= nonlinearity,
+                learnable_shortcut=False, use_spect=False, use_coord=False)
+                
+        self.res1 = ResBlock(ngf*4, output_nc=ngf*4, hidden_nc=ngf*4, norm_layer=norm_layer, nonlinearity= nonlinearity,
+                learnable_shortcut=False, use_spect=False, use_coord=False)
+
+        # self.loss_fn = torch.nn.MSELoss()
+        
+        
+    def generate_parsing_map(self, pose1, pose2, par1: Union[torch.Tensor, None], text1: Union[torch.Tensor, None]):
+        
+        if text1 is None:
+            
+            h, w = pose1.shape[-2:]
+            if par1 is not None:
+                parcode, _ = self.parnet(torch.cat((par1, pose1, pose2),1))
+            else:
+                parcode, _ = self.parnet(torch.cat((pose1, pose2),1))
+        else:
+            if self.use_reduc_layer:
+                text1 = self.linear(text1.float())
+            b, embed_dim = text1.shape
+            if par1 is not None:
+                h, w = par1.shape[-2:]
+                parcode, _ = self.parnet(torch.cat((par1, pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
+            else:
+                h, w = pose1.shape[-2:]
+                parcode, _ = self.parnet(torch.cat((pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
+            
+        return parcode
+
+    def forward(self, img1: torch.Tensor, img2: torch.Tensor,
+                pose1: torch.Tensor, pose2: torch.Tensor, par1: Union[torch.Tensor, None], text1: Union[torch.Tensor, None]):
         """_summary_
 
         Args:
@@ -110,22 +163,14 @@ class PoseGenerator(BaseNetwork):
         SPL2_onehot = SPL2_onehot.permute(0, 3, 1, 2)
         par2 = SPL2_onehot
         '''
-        if text1 is None:
-            
-            h, w = pose1.shape[-2:]
-            if par1 is not None:
-                parcode, _ = self.parnet(torch.cat((par1, pose1, pose2),1))
-            else:
-                parcode, _ = self.parnet(torch.cat((pose1, pose2),1))
-        else:
-            if self.use_reduc_layer:
-                text1 = self.linear(text1.float())
-            b, embed_dim = text1.shape
-            if par1 is not None:
-                h, w = par1.shape[-2:]
-                parcode, _ = self.parnet(torch.cat((par1, pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
-            else:
-                h, w = pose1.shape[-2:]
-                parcode, _ = self.parnet(torch.cat((pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
-            
-        return parcode
+        parse_gen2 = self.generate_parsing_map(pose1, pose2, par1, text1)
+        
+        if self.stage_choice == 'stage_12':
+            # bs: batch size; s_size: the feature number of segmentation map 8; cs: the feature number of codes 256
+            codes_vector, exist_vector, img1code = self.Zencoder(img1, par1) # shape of these three vectors (bs, s_size+1, cs)[global and local]; (bs, s_size)[state for each batch size and each seg feature]; (bs, cs, hs, ws)[feature before self.get_code]
+            parcode = self.parenc(torch.cat((par1, parse_gen2, pose2, img1), 1))
+        
+            return None # which needs to be modified.
+        
+        elif self.stage_choice == 'stage1':
+            return parse_gen2

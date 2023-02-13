@@ -159,7 +159,17 @@ class Visualizer():
 
         print(message)
         with open(self.eval_log_name, "a") as log_file:
-            log_file.write('%s\n' % message)  
+            log_file.write('%s\n' % message)
+    
+    def print_eval_metric(self, scores: dict):
+        
+        message = ''
+        for k, v in scores.items():
+            message += '%s: %.4f ' % (k, v)
+
+        print(message)
+        with open(self.eval_log_name, "a") as log_file:
+            log_file.write('%s\n' % message)
 
     # save image to the disk
     def save_images(self, webpage, visuals, image_path):

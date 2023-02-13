@@ -22,40 +22,47 @@ class Painet(BaseModel): # which is only for parsing models
     @staticmethod
     def modify_options(parser, is_train=True):
         parser.add_argument('--netG', type=str, default='pose', help='The name of net Generator')
+        parser.add_argument('--netD', type=str, default='res', help='The name of net Discriminator')
         parser.add_argument('--init_type', type=str, default='orthogonal', help='Initial type')
 
         # if is_train:
-        parser.add_argument('--use_spect_g', action='store_false', help="whether use spectral normalization in generator")
-        # parser.add_argument('--use_spect_d', action='store_false', help="whether use spectral normalization in discriminator")
-        parser.add_argument('--save_input', action='store_false', help="whether save the input images when testing")
-        parser.add_argument('--use_reduc_layer', type= util.str2bool, default= True, help="whether to use reduction layer")
-        parser.add_argument('--parsing_net_choice', type= str, default= 'ParsingNet', choices=['ParsingNet', 'ShapeUNet_FCNHead'], help= "choose the masked part of the segmentation map. upper_clothes means masking the upper clothing; both means masking the upper clothing and arms; wo means without masking")
+        parser.add_argument('--ratio_g2d', type=float, default=0.1, help='learning rate ratio G to D')
+        parser.add_argument('--lambda_rec', type=float, default=5.0, help='weight for image reconstruction loss')
+        parser.add_argument('--lambda_g', type=float, default=2.0, help='weight for generation loss')
         
-        temp = parser.parse_args() # For the parsing_net_choice
-        if temp.parsing_net_choice == 'ParsingNet':
-            pass
-        elif temp.parsing_net_choice == 'ShapeUNet_FCNHead':
-            parser.add_argument('--encoder_attr_embedding', type=int, default=512, help='The dim of CLIP text embeddings')
-            parser.add_argument('--encoder_in_channels', type=int, default=44, help='The dim of condition like pose1 + pose2 + segmentation_map')
-            parser.add_argument('--encoder_in_channels', type=int, default=44, help='The dim of condition like pose1 + pose2 + segmentation_map')
+        parser.add_argument('--lambda_style', type=float, default=200.0, help='weight for the VGG19 style loss')
+        parser.add_argument('--lambda_content', type=float, default=0.5, help='weight for the VGG19 content loss')
+        parser.add_argument('--lambda_regularization', type=float, default=30.0, help='weight for the affine regularization loss')
+        
+        parser.add_argument('--use_spect_g', action='store_false', help="whether use spectral normalization in generator")
+        parser.add_argument('--use_spect_d', action='store_false', help="whether use spectral normalization in discriminator")
+        parser.add_argument('--save_input', action='store_false', help="whether save the input images when testing")
+        
+        # For modification
+        parser.add_argument('--use_reduc_layer', type= util.str2bool, default= True, help="whether to use reduction layer")
+        parser.add_argument('--parsing_net_choice', type= str, default= 'ParsingNet', choices=['ParsingNet', 'ShapeUNet_FCNHead'], help= "choose the parsing model")
+        parser.add_argument('--stage_choice', type= str, default= 'stage1', choices=['stage1', 'stage_12'], help= "choose the stage of this model")
+        
+        # temp = parser.parse_args() # For the parsing_net_choice
+        # if temp.parsing_net_choice == 'ParsingNet':
+        #     pass
+        # elif temp.parsing_net_choice == 'ShapeUNet_FCNHead':
+        #     parser.add_argument('--encoder_attr_embedding', type=int, default=512, help='The dim of CLIP text embeddings')
+        #     parser.add_argument('--encoder_in_channels', type=int, default=44, help='The dim of condition like pose1 + pose2 + segmentation_map')
+        #     parser.add_argument('--encoder_in_channels', type=int, default=44, help='The dim of condition like pose1 + pose2 + segmentation_map')
             
-            pass
+        #     pass
 
         parser.set_defaults(use_spect_g=False)
-        # parser.set_defaults(use_spect_d=True)
+        parser.set_defaults(use_spect_d=True)
         parser.set_defaults(save_input=False)
 
         return parser
 
     def __init__(self, opt):
         BaseModel.__init__(self, opt)
-        self.loss_names = ['par', 'par1'] # only for parsing models
-
-        if opt.use_masked_SPL1:
-            self.visual_names = ['input_BP1', 'show_SPL1', 'input_BP2', 'parsav', 'label_P2'] # [:3 [input], 'Generated segmentation map', 'True segmentation map']
-        else:
-            self.visual_names = ['input_BP1', 'input_BP2', 'parsav', 'label_P2']
-        self.model_names = ['G'] # 
+        # for parsing models(stage 1) + stage 2 
+        self.init_params(opt.stage_choice, opt)
 
         self.FloatTensor = torch.cuda.FloatTensor if len(self.gpu_ids)>0 \
             else torch.FloatTensor
@@ -66,6 +73,10 @@ class Painet(BaseModel): # which is only for parsing models
                                  use_spect=opt.use_spect_g, norm='instance', activation='LeakyReLU', use_reduc_layer= use_reduc_layer, use_text= opt.use_text, 
                                  use_masked_SPL1= opt.use_masked_SPL1, parsing_net_choice= opt.parsing_net_choice) # only for the segmentation model
 
+        # define the discriminator 
+        if self.opt.dataset_mode == 'fashion' and opt.stage_choice == 'stage_12':
+            self.net_D = network.define_d(opt, ndf=32, img_f=128, layers=4, use_spect=opt.use_spect_d)
+        
         # define the CLIP
         if opt.use_text:
             self.model_clip, _ = clip.load("ViT-B/32", device= 'cuda')
@@ -97,7 +108,31 @@ class Painet(BaseModel): # which is only for parsing models
         # load the pre-trained model and schedulers
         self.setup(opt)
 
+    def init_params(self, stage_choice: str, opt) -> None:
+        """Init params like self.loss_names, self.visual_names, self.model_names etc.
 
+        Args:
+            stage_choice (str): 'stage1' or 'stage_12'
+            opt : the params in command line
+        """
+        if stage_choice == 'stage1':
+            self.loss_names = ['par', 'par1'] # only for parsing models
+            
+            if opt.use_masked_SPL1:
+                self.visual_names = ['input_BP1', 'show_SPL1', 'input_BP2', 'parsav', 'label_P2'] # [:3 [input], 'Generated segmentation map', 'True segmentation map']
+            else:
+                self.visual_names = ['input_BP1', 'input_BP2', 'parsav', 'label_P2']
+            self.model_names = ['G'] #
+                
+        elif stage_choice == 'stage_12':
+            
+            self.loss_names = ['par', 'par1', 
+                           'app_gen', 'content_gen', 'style_gen', 'ad_gen', 'dis_img_gen']
+            
+            self.visual_names = ['input_P1','input_P2', 'img_gen', 'parsav', 'label_P2']
+            self.model_names = ['G','D']
+            
+    
     def set_input(self, input):
         # move to GPU and change data types
         # self.input = input
@@ -137,7 +172,7 @@ class Painet(BaseModel): # which is only for parsing models
 
     def test(self):
         """Forward function used in test time"""
-        self.parsav  = self.net_G(self.input_BP1, self.input_BP2, self.input_SPL1, self.input_TXT1)
+        self.parsav  = self.net_G(None, None, self.input_BP1, self.input_BP2, self.input_SPL1, self.input_TXT1)
         
         # parsing loss
         label_P2 = self.label_P2.squeeze(1).long()
@@ -157,7 +192,7 @@ class Painet(BaseModel): # which is only for parsing models
 
     def forward(self):
         """Run forward processing to get the inputs"""
-        self.parsav = self.net_G(self.input_BP1, self.input_BP2, self.input_SPL1, self.input_TXT1)
+        self.parsav = self.net_G(None, None, self.input_BP1, self.input_BP2, self.input_SPL1, self.input_TXT1)
       
 
     def backward_G(self):
