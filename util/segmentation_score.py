@@ -15,7 +15,7 @@ class SegmentationMetric(object):
 
         Args:
             nclass (int): The number of classes.
-            choice (str): ['full', 'upper_lower']
+            choice (str): ['full', 'upper_lower', 'upper']
         """
         super().__init__()
         self.nclass = nclass
@@ -38,9 +38,9 @@ class SegmentationMetric(object):
             if self.choice == 'full':
                 correct, labeled = batch_pix_accuracy(pred, label, self.filter_bg) # based on the level of pixels
                 inter, union = batch_intersection_union(pred, label, self.nclass, self.filter_bg)
-            elif self.choice == 'upper_lower':
-                correct, labeled = batch_pix_accuracy_upper_lower_clothes(pred, label, self.filter_bg) # based on the level of pixels
-                inter, union = batch_intersection_union_upper_lower_clothes(pred, label, self.nclass, self.filter_bg)
+            elif self.choice == 'upper_lower' or self.choice == 'upper':
+                correct, labeled = batch_pix_accuracy_upper_lower_clothes(pred, label, self.filter_bg, self.choice) # based on the level of pixels
+                inter, union = batch_intersection_union_upper_lower_clothes(pred, label, self.nclass, self.filter_bg, self.choice)
             
             self.total_correct += correct
             self.total_label += labeled
@@ -83,14 +83,30 @@ class SegmentationMetric(object):
     def reset(self):
         """Resets the internal evaluation result to initial state.
         """
-        self.total_inter = torch.zeros(self.nclass) if self.choice == 'full' else torch.zeros(2)
-        self.total_union = torch.zeros(self.nclass) if self.choice == 'full' else torch.zeros(2)
+        if self.choice == 'full':
+            self.total_inter = torch.zeros(self.nclass)
+            self.total_union = torch.zeros(self.nclass)
+            
+            self.current_inter = torch.zeros(self.nclass) # current_step
+            self.current_union = torch.zeros(self.nclass)
+            
+        elif self.choice == 'upper_lower':
+            self.total_inter = torch.zeros(2)
+            self.total_union = torch.zeros(2)
+            
+            self.current_inter = torch.zeros(2)
+            self.current_union = torch.zeros(2)
+        elif self.choice == 'upper':
+            self.total_inter = torch.zeros(1)
+            self.total_union = torch.zeros(1)
+            
+            self.current_inter = torch.zeros(1)
+            self.current_union = torch.zeros(1)
+        
         self.total_correct = 0
         self.total_label = 0
         
-        # current step
-        self.current_inter = torch.zeros(self.nclass) if self.choice == 'full' else torch.zeros(2)
-        self.current_union = torch.zeros(self.nclass) if self.choice == 'full' else torch.zeros(2)
+        # current step 
         self.current_correct = 0
         self.current_label = 0
         
@@ -112,18 +128,25 @@ def batch_pix_accuracy(output: torch.Tensor, target: torch.Tensor, filter_bg: bo
     return pixel_correct, pixel_labeled
 
 
-def batch_pix_accuracy_upper_lower_clothes(output: torch.Tensor, target: torch.Tensor, filter_bg: bool):
-    """Cal the pixel accuracy only for upper and lower clothes
+def batch_pix_accuracy_upper_lower_clothes(output: torch.Tensor, target: torch.Tensor, filter_bg: bool, upper_lower_choice: str):
+    """Cal the pixel accuracy for upper and lower clothes, upper clothes.
 
     Args:
         output (torch.Tensor): 4D Tensor
         target (torch.Tensor): 3D Tensor
+        upper_lower_choice(str): 'upper_lower', 'upper'
     """
     predict = torch.argmax(output.long(), 1) + 1
     target = target.long() + 1 # why + 1
     
-    pixel_labeled = torch.sum(target == 4).item() + torch.sum(target == 6).item()
-    pixel_correct = torch.sum((predict == target) * (target == 4)).item() + torch.sum((predict == target) * (target == 6)).item() # predict > 0
+    if upper_lower_choice == 'upper_lower':
+        part_indexes = [4, 6]
+    elif upper_lower_choice == 'upper':
+        part_indexes = [4]
+        
+    
+    pixel_labeled = sum([torch.sum(target == index).item() for index in part_indexes])
+    pixel_correct = sum([torch.sum((predict == target) * (target == index)).item() for index in part_indexes]) # predict > 0
     assert pixel_correct <= pixel_labeled, "Correct are should be smaller than label"
 
     return pixel_correct, pixel_labeled
@@ -156,13 +179,14 @@ def batch_intersection_union(output, target, nclass, filter_bg: bool):
     return area_inter.float(), area_union.float()
 
 
-def batch_intersection_union_upper_lower_clothes(output, target, nclass, filter_bg: bool):
+def batch_intersection_union_upper_lower_clothes(output, target, nclass, filter_bg: bool, upper_lower_choice: str):
     """mIoU
 
     Args:
         output (_type_): 4D Tensor
         target (_type_): 3D Tensor
         nclass (int): The number of classes
+        upper_lower_choice(str): 'upper_lower', 'upper'
     """
     mini = 1
     maxi = nclass
@@ -170,14 +194,19 @@ def batch_intersection_union_upper_lower_clothes(output, target, nclass, filter_
     predict = torch.argmax(output, 1) + 1
     target = target.float() + 1
     
+    if upper_lower_choice == 'upper_lower':
+        part_indexes = [3, 5]
+    elif upper_lower_choice == 'upper':
+        part_indexes = [3]
+    
     # import pdb; pdb.set_trace()
     
     predict = predict.float() * (target > 0).float()
     intersection = predict * (predict == target).float()
     # choose the values of related indexes
-    area_inter = torch.histc(intersection.cpu(), bins=nbins, min=mini, max=maxi)[[3, 5]]
-    area_pred = torch.histc(predict.cpu(), bins= nbins, min= mini, max= maxi)[[3, 5]]
-    area_lab = torch.histc(target.cpu(), bins= nbins, min=mini, max=maxi)[[3, 5]]
+    area_inter = torch.histc(intersection.cpu(), bins=nbins, min=mini, max=maxi)[part_indexes]
+    area_pred = torch.histc(predict.cpu(), bins= nbins, min= mini, max= maxi)[part_indexes]
+    area_lab = torch.histc(target.cpu(), bins= nbins, min=mini, max=maxi)[part_indexes]
     area_union = area_pred + area_lab - area_inter
     assert torch.sum(area_inter > area_union).item() == 0, "Intersection area should be smaller than Union area"
     return area_inter.float(), area_union.float()
