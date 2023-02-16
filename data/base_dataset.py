@@ -27,6 +27,7 @@ class BaseDataset(data.Dataset):
         parser.add_argument('--mask_choice', type= str, default= 'both', choices=['upper_clothes', 'both', 'wo'], help= "choose the masked part of the segmentation map. upper_clothes means masking the upper clothing; both means masking the upper clothing and arms; wo means without masking")
         parser.add_argument('--use_masked_SPL1', type= util.str2bool, default= True, help= "whether to use masked segmentation map of pose 1")
         parser.add_argument('--seg_map_visual_choice', type= str, default= 'horizontal', choices=['horizontal', 'vertical'], help= "choose the way for visualizing seg map in test set")
+        parser.add_argument('--use_pose1', type= util.str2bool, default= True, help= "whether to use conditional pose")
         return parser
 
     def initialize(self, opt):
@@ -52,6 +53,15 @@ class BaseDataset(data.Dataset):
         self.annotation_file = pd.read_csv(self.bone_file, sep=':')
         self.annotation_file = self.annotation_file.set_index('name')
         
+        self.return_dict = {'P1': 'P1', 'BP1': 'BP1', 'P2': 'P2', 'BP2': 'BP2', 'SPL1_masked': 'SPL1_onehot_masked', 'SPL1_img': 'SPL1_tensor_mask', 'TEXT': 'txt', 'SPL2':'SPL2_onehot', 'label_P2': 'SPL2',
+                'P1_path': 'P1_name', 'P2_path': 'P2_name'}
+        
+        if not opt.use_pose1:
+            del self.return_dict['BP1']
+        if not opt.use_masked_SPL1:
+            del self.return_dict['SPL1_masked']
+            del self.return_dict['SPL1_img'] # Choose 'BP1', 'SPL1_onehot_masked', 'SPL1_tensor_mask' based on self.opt.use_pose1, self.opt.use_masked_SPL1
+            
         # For the masked choice.
     
     def masked_choice(self, choice: str, temp: torch.Tensor) -> None:
@@ -187,8 +197,11 @@ class BaseDataset(data.Dataset):
         angle, shift, scale = self.getRandomAffineParam()
         P1_img = F.affine(P1_img, angle=angle, translate=shift, scale=scale, shear=0, fillcolor=(128, 128, 128))
         center = (P1_img.size[0] * 0.5 + 0.5, P1_img.size[1] * 0.5 + 0.5)
-        affine_matrix = self.get_affine_matrix(center=center, angle=angle, translate=shift, scale=scale, shear=0)
-        BP1 = self.obtain_bone(P1_name, affine_matrix)
+        
+        if self.opt.use_pose1:
+            affine_matrix = self.get_affine_matrix(center=center, angle=angle, translate=shift, scale=scale, shear=0)
+            BP1 = self.obtain_bone(P1_name, affine_matrix)
+            
         P1 = self.trans(P1_img)
 
 
@@ -221,14 +234,16 @@ class BaseDataset(data.Dataset):
         # TXT1_complement = self.model_clip.encode_text(token_txt)
         
         SPL2_onehot, SPL2 = self.get_SPL2(P2_name)
+        
         if self.opt.use_masked_SPL1:
             SPL1_onehot_masked, SPL1_tensor_mask = self.get_masked_SPL1(P1_name)
-            
-            return {'P1': P1, 'BP1': BP1, 'P2': P2, 'BP2': BP2, 'SPL1_masked': SPL1_onehot_masked, 'SPL1_img': SPL1_tensor_mask, 'TEXT': txt, 'SPL2':SPL2_onehot, 'label_P2': SPL2,
-                'P1_path': P1_name, 'P2_path': P2_name}
-        else:
-            return {'P1': P1, 'BP1': BP1, 'P2': P2, 'BP2': BP2, 'TEXT': txt, 'SPL2':SPL2_onehot, 'label_P2': SPL2,
-                'P1_path': P1_name, 'P2_path': P2_name}
+        
+        params_dict = dict()
+        
+        for key, value in self.return_dict.items():
+            params_dict[key] = locals()[value]
+        
+        return params_dict
 
     def obtain_bone(self, name, affine_matrix):
         string = self.annotation_file.loc[name]

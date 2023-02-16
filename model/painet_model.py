@@ -39,9 +39,10 @@ class Painet(BaseModel): # which is only for parsing models
         parser.add_argument('--save_input', action='store_false', help="whether save the input images when testing")
         
         # For modification
-        parser.add_argument('--use_reduc_layer', type= util.str2bool, default= True, help="whether to use reduction layer")
+        parser.add_argument('--use_reduc_layer', type= util.str2bool, default= True, help="whether to use reduction layer for CLIP text embeddings")
         parser.add_argument('--parsing_net_choice', type= str, default= 'ParsingNet', choices=['ParsingNet', 'ShapeUNet_FCNHead'], help= "choose the parsing model")
         parser.add_argument('--stage_choice', type= str, default= 'stage1', choices=['stage1', 'stage_12'], help= "choose the stage of this model")
+        parser.add_argument('--clip_finetune_choice', type= str, default= 'wo', choices=['wo', 'multi_head_attention_blocks'], help= "choose finetune blocks after CLIP text embeddings")
         
         # temp = parser.parse_args() # For the parsing_net_choice
         # if temp.parsing_net_choice == 'ParsingNet':
@@ -71,7 +72,7 @@ class Painet(BaseModel): # which is only for parsing models
         use_reduc_layer = opt.use_reduc_layer # 
         self.net_G = network.define_g(opt, image_nc=opt.image_nc, structure_nc=opt.structure_nc, ngf=64,
                                  use_spect=opt.use_spect_g, norm='instance', activation='LeakyReLU', use_reduc_layer= use_reduc_layer, use_text= opt.use_text, 
-                                 use_masked_SPL1= opt.use_masked_SPL1, parsing_net_choice= opt.parsing_net_choice) # only for the segmentation model
+                                 use_masked_SPL1= opt.use_masked_SPL1, use_BP1= opt.use_pose1, parsing_net_choice= opt.parsing_net_choice) # only for the segmentation model
 
         # define the discriminator 
         if self.opt.dataset_mode == 'fashion' and opt.stage_choice == 'stage_12':
@@ -120,8 +121,10 @@ class Painet(BaseModel): # which is only for parsing models
             
             if opt.use_masked_SPL1:
                 self.visual_names = ['input_BP1', 'show_SPL1', 'input_BP2', 'parsav', 'label_P2'] # [:3 [input], 'Generated segmentation map', 'True segmentation map']
-            else:
+            elif opt.use_pose1:
                 self.visual_names = ['input_BP1', 'input_BP2', 'parsav', 'label_P2']
+            else:
+                self.visual_names = ['input_BP2', 'parsav', 'label_P2']
             self.model_names = ['G'] #
                 
         elif stage_choice == 'stage_12':
@@ -139,13 +142,16 @@ class Painet(BaseModel): # which is only for parsing models
         if self.opt.use_masked_SPL1:
             input_P1, input_BP1, input_SPL1, self.show_SPL1, self.show_TXT = input['P1'], input['BP1'], input['SPL1_masked'], input['SPL1_img'], input['TEXT']
             input_P2, input_BP2, input_SPL2, label_P2 = input['P2'], input['BP2'], input['SPL2'], input['label_P2']
-        else:
+        elif self.opt.use_pose1:
             input_P1, input_BP1, self.show_TXT = input['P1'], input['BP1'], input['TEXT']
+            input_P2, input_BP2, input_SPL2, label_P2 = input['P2'], input['BP2'], input['SPL2'], input['label_P2']
+        else:
+            input_P1, self.show_TXT = input['P1'], input['TEXT']
             input_P2, input_BP2, input_SPL2, label_P2 = input['P2'], input['BP2'], input['SPL2'], input['label_P2']
 
         if len(self.gpu_ids) > 0:
             self.input_P1 = input_P1.cuda(self.gpu_ids[0])
-            self.input_BP1 = input_BP1.cuda(self.gpu_ids[0])
+            self.input_BP1 = input_BP1.cuda(self.gpu_ids[0]) if self.opt.use_pose1 else None
             self.input_SPL1 = input_SPL1.cuda(self.gpu_ids[0]) if self.opt.use_masked_SPL1 else None
             self.input_P2 = input_P2.cuda(self.gpu_ids[0])
             self.input_BP2 = input_BP2.cuda(self.gpu_ids[0])  

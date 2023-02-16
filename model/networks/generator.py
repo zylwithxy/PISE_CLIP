@@ -57,7 +57,7 @@ class ParsingNet(nn.Module):
 class PoseGenerator(BaseNetwork):
     def __init__(self, image_nc=3, structure_nc=18, output_nc=3, ngf=64, norm='instance', 
                 activation='LeakyReLU', use_spect=True, use_coord=False, use_reduc_layer= False, 
-                use_text= False, use_masked_SPL1= True, parsing_net_choice= 'ParsingNet', 
+                use_text= False, use_masked_SPL1= True, use_BP1 = True, parsing_net_choice= 'ParsingNet', 
                 stage_choice= 'stage1'):
         super(PoseGenerator, self).__init__()
 
@@ -69,11 +69,12 @@ class PoseGenerator(BaseNetwork):
         
         
         if use_reduc_layer:
-            assert parsing_net_choice == 'ParsingNet'
+            assert parsing_net_choice == 'ParsingNet' and use_text
             self.linear = nn.Linear(512, 8)
         
-        input_feature_num = 8+18*2+8 if use_reduc_layer else 8+18*2+512
-        input_feature_num = input_feature_num if use_text else 8+18*2
+        input_feature_num = 8+18*2 if use_BP1 else 8+18
+        if use_text:
+            input_feature_num = input_feature_num + 8 if use_reduc_layer else input_feature_num+512
         input_feature_num = input_feature_num if use_masked_SPL1 else input_feature_num - 8
         
         if parsing_net_choice == 'ParsingNet':
@@ -114,30 +115,42 @@ class PoseGenerator(BaseNetwork):
         # self.loss_fn = torch.nn.MSELoss()
         
         
-    def generate_parsing_map(self, pose1, pose2, par1: Union[torch.Tensor, None], text1: Union[torch.Tensor, None]):
+    def generate_parsing_map(self, pose1: Union[torch.Tensor, None], pose2, par1: Union[torch.Tensor, None], text1: Union[torch.Tensor, None]):
         
         if text1 is None:
             
-            h, w = pose1.shape[-2:]
+            h, w = pose2.shape[-2:]
             if par1 is not None:
-                parcode, _ = self.parnet(torch.cat((par1, pose1, pose2),1))
+                if pose1 is not None:
+                    parcode, _ = self.parnet(torch.cat((par1, pose1, pose2),1))
+                else:
+                    parcode, _ = self.parnet(torch.cat((par1, pose2),1))
             else:
-                parcode, _ = self.parnet(torch.cat((pose1, pose2),1))
+                if pose1 is not None:
+                    parcode, _ = self.parnet(torch.cat((pose1, pose2),1))
+                else:
+                    parcode, _ = self.parnet(pose2)
         else:
             if self.use_reduc_layer:
                 text1 = self.linear(text1.float())
             b, embed_dim = text1.shape
             if par1 is not None:
                 h, w = par1.shape[-2:]
-                parcode, _ = self.parnet(torch.cat((par1, pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
+                if pose1 is not None:
+                    parcode, _ = self.parnet(torch.cat((par1, pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
+                else:
+                    parcode, _ = self.parnet(torch.cat((par1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
             else:
-                h, w = pose1.shape[-2:]
-                parcode, _ = self.parnet(torch.cat((pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
+                h, w = pose2.shape[-2:]
+                if pose1 is not None:
+                    parcode, _ = self.parnet(torch.cat((pose1, pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
+                else:
+                    parcode, _ = self.parnet(torch.cat((pose2, text1.view(b, embed_dim, 1, 1).expand(b, embed_dim, h, w)),1))
             
         return parcode
 
-    def forward(self, img1: torch.Tensor, img2: torch.Tensor,
-                pose1: torch.Tensor, pose2: torch.Tensor, par1: Union[torch.Tensor, None], text1: Union[torch.Tensor, None]):
+    def forward(self, img1: Union[torch.Tensor, None], img2: Union[torch.Tensor, None],
+                pose1: Union[torch.Tensor, None], pose2: torch.Tensor, par1: Union[torch.Tensor, None], text1: Union[torch.Tensor, None]):
         """_summary_
 
         Args:
