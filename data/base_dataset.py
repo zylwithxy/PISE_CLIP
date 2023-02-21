@@ -28,6 +28,7 @@ class BaseDataset(data.Dataset):
         parser.add_argument('--use_masked_SPL1', type= util.str2bool, default= True, help= "whether to use masked segmentation map of pose 1")
         parser.add_argument('--seg_map_visual_choice', type= str, default= 'horizontal', choices=['horizontal', 'vertical'], help= "choose the way for visualizing seg map in test set")
         parser.add_argument('--use_pose1', type= util.str2bool, default= True, help= "whether to use conditional pose")
+        parser.add_argument('--use_prompt', type= util.str2bool, default= True, help= "whether to use prompt")
         return parser
 
     def initialize(self, opt):
@@ -36,32 +37,40 @@ class BaseDataset(data.Dataset):
         size = len(self.name_pairs)
         self.dataset_size = size
         self.class_num = 8
+        prompt = 'The sleeve length of the upper clothing of the person is {}'
         self.shape_text = ["sleeveless", "short-sleeve", "medium-sleeve", "long-sleeve", "not long-sleeve", "not visible"]
+        if opt.use_prompt:
+            self.shape_text = [prompt.format(c) for c in self.shape_text]
 
         if isinstance(opt.load_size, int):
             self.load_size = (opt.load_size, opt.load_size)
         else:
             self.load_size = opt.load_size
 
-
-        transform_list=[]
-        # transform_list.append(transforms.Resize(size=self.load_size))
-        transform_list.append(transforms.ToTensor())
-        transform_list.append(transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)))
-        self.trans = transforms.Compose(transform_list) 
+        if opt.clip_finetune_choice == 'wo':
+            transform_list=[]
+            # transform_list.append(transforms.Resize(size=self.load_size))
+            transform_list.append(transforms.ToTensor())
+            transform_list.append(transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)))
+            self.trans = transforms.Compose(transform_list)
+        elif opt.clip_finetune_choice == 'CLIP_adapter':
+            from util.util import _transform
+            self.trans = _transform(224) # which is for "ViT-B/32"
+            
 
         self.annotation_file = pd.read_csv(self.bone_file, sep=':')
         self.annotation_file = self.annotation_file.set_index('name')
         
         self.return_dict = {'P1': 'P1', 'BP1': 'BP1', 'P2': 'P2', 'BP2': 'BP2', 'SPL1_masked': 'SPL1_onehot_masked', 'SPL1_img': 'SPL1_tensor_mask', 'TEXT': 'txt', 'SPL2':'SPL2_onehot', 'label_P2': 'SPL2',
-                'P1_path': 'P1_name', 'P2_path': 'P2_name'}
+                'P1_path': 'P1_name', 'P2_path': 'P2_name', 'shape_label': 'shape_label'}
         
         if not opt.use_pose1:
             del self.return_dict['BP1']
         if not opt.use_masked_SPL1:
             del self.return_dict['SPL1_masked']
             del self.return_dict['SPL1_img'] # Choose 'BP1', 'SPL1_onehot_masked', 'SPL1_tensor_mask' based on self.opt.use_pose1, self.opt.use_masked_SPL1
-            
+        if opt.clip_finetune_choice == 'wo':
+            del self.return_dict['shape_label']
         # For the masked choice.
     
     def masked_choice(self, choice: str, temp: torch.Tensor) -> None:
@@ -237,6 +246,9 @@ class BaseDataset(data.Dataset):
         
         if self.opt.use_masked_SPL1:
             SPL1_onehot_masked, SPL1_tensor_mask = self.get_masked_SPL1(P1_name)
+            
+        if self.opt.clip_finetune_choice == 'CLIP_adapter':
+            shape_label = torch.tensor(self.fname_shape_pair[P1_name], dtype= torch.long)
         
         params_dict = dict()
         

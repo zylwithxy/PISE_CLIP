@@ -213,17 +213,22 @@ def get_scheduler(optimizer, opt):
             optimizer.step()
         scheduler.step() # which is used after each epoch.
     """
-    if opt.lr_policy == 'lambda':
-        def lambda_rule(epoch):
-            lr_l = 1.0 - max(0, epoch+1+1+opt.iter_count-opt.niter) / float(opt.niter_decay+1)
-            return lr_l
-        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
-    elif opt.lr_policy == 'step':
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=opt.lr_decay_iters, gamma=0.1)
-    elif opt.lr_policy == 'exponent':
-        scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    if optimizer.__class__.__name__ != 'SGD':
+        if opt.lr_policy == 'lambda':
+            def lambda_rule(epoch):
+                lr_l = 1.0 - max(0, epoch+1+1+opt.iter_count-opt.niter) / float(opt.niter_decay+1)
+                return lr_l
+            scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+        elif opt.lr_policy == 'step':
+            scheduler = lr_scheduler.StepLR(optimizer, step_size=opt.lr_decay_iters, gamma=0.1)
+        elif opt.lr_policy == 'exponent':
+            scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+        else:
+            raise NotImplementedError('learning rate policy [%s] is not implemented', opt.lr_policy)
+        
     else:
-        raise NotImplementedError('learning rate policy [%s] is not implemented', opt.lr_policy)
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, float(50))
+    
     return scheduler
 
 

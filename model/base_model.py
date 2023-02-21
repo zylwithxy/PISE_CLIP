@@ -71,7 +71,9 @@ class BaseModel():
         for scheduler in self.schedulers:
             scheduler.step()
         lr = self.optimizers[0].param_groups[0]['lr']
-        print('learning rate=%.7f' % lr)
+        lr_adapter = self.optimizers[1].param_groups[0]['lr']
+        print('learning rate of generator =%.7f' % lr)
+        print('learning rate of generator =%.7f' % lr_adapter)
 
     def get_current_errors(self):
         """Return training loss"""
@@ -79,6 +81,10 @@ class BaseModel():
         for name in self.loss_names:
             if isinstance(name, str):
                 errors_ret[name] = getattr(self, 'loss_' + name).item()
+        
+        if self.opt.clip_finetune_choice == 'CLIP_adapter':
+            errors_ret['shape_class_accuracy'] = getattr(self, 'class_accuracy')
+
         return errors_ret
 
     def get_current_eval_results(self):

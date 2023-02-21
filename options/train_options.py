@@ -13,6 +13,7 @@ class TrainOptions(BaseOptions):
         # learning rate and loss weight
         parser.add_argument('--lr_policy', type=str, default='lambda', help='learning rate policy[lambda|step|plateau]')
         parser.add_argument('--lr', type=float, default=1e-4, help='initial learning rate for adam')
+        parser.add_argument('--lr_adapter', type=float, default=0.002, help='initial learning rate for SGD clip adapter') # learning rate for clip adapter optimizer(SGD)
         parser.add_argument('--gan_mode', type=str, default='lsgan', choices=['wgan-gp', 'hinge', 'lsgan'])
 
         # display the results

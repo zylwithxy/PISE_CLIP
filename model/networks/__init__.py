@@ -3,6 +3,9 @@ from model.networks.base_network import BaseNetwork
 from model.networks.discriminator import *
 from model.networks.generator import *
 import util.util as util
+import importlib
+import errno
+import os
 
 
 def find_network_using_name(target_network_name, filename, extend=None):
@@ -18,7 +21,7 @@ def find_network_using_name(target_network_name, filename, extend=None):
 
 
 
-def create_network(cls, opt, **parameter_dic):
+def create_network(cls, opt, **parameter_dic) -> nn.Module:
     for i in parameter_dic:
         print(i)
     net = cls(**parameter_dic)
@@ -45,6 +48,25 @@ def define_d(opt, name=None, filename=None, **parameter_dic):
     netD_cls = find_network_using_name(name, filename)
     return create_network(netD_cls, opt, **parameter_dic)
 
+
+def define_clip_adapter(opt, **parameter_dic):
+    cls_name = 'CustomCLIP'
+    module_name = 'model.networks.' + 'clip_adapter'
+    clslib = importlib.import_module(module_name)
+    
+    clip_adapter = None
+    for name, clsobj in clslib.__dict__.items():
+        if name == cls_name:
+            clip_adapter = clsobj
+            
+    if clip_adapter is None:
+        raise FileNotFoundError(
+        errno.ENOENT, os.strerror(errno.ENOENT), cls_name)
+    
+    return create_network(clip_adapter, opt, **parameter_dic)
+        
+
+        
 
 def define_e(opt, name=None, **parameter_dic):
     # there exists only one encoder type

@@ -3,7 +3,7 @@ import torch.nn as nn
 from model.base_model import BaseModel
 from model.networks import base_function, external_function
 import model.networks as network
-from util import task, util, accuracy
+from util import task, util
 import itertools
 import data as Dataset
 import numpy as np
@@ -42,10 +42,7 @@ class Painet(BaseModel): # which is only for parsing models
         parser.add_argument('--use_reduc_layer', type= util.str2bool, default= True, help="whether to use reduction layer for CLIP text embeddings")
         parser.add_argument('--parsing_net_choice', type= str, default= 'ParsingNet', choices=['ParsingNet', 'ShapeUNet_FCNHead'], help= "choose the parsing model")
         parser.add_argument('--stage_choice', type= str, default= 'stage1', choices=['stage1', 'stage_12'], help= "choose the stage of this model")
-        parser.add_argument('--clip_finetune_choice', type= str, default= 'wo', choices=['wo', 'CLIP_adapter'], help= "choose finetune blocks after CLIP image or text embeddings")
-        parser.add_argument('--clip_adapter_ratio', type= float, default= 0.2, help= "Determine the ratio for CLIP adapter")
-        parser.add_argument('--clip_adapter_pos', type= str, default= 'image', choices=['image', 'text', 'image_text'], help= "choose the position for the CLIP adapter insertation")
-        parser.add_argument('--clip_adapter_img_input', type= str, default= 'full_img', choices=['full_img', 'part_img', 'full_seg', 'part_seg'], help= "choose the input type for CLIP image encoder")
+        parser.add_argument('--clip_finetune_choice', type= str, default= 'wo', choices=['wo', 'multi_head_attention_blocks'], help= "choose finetune blocks after CLIP text embeddings")
         
         # temp = parser.parse_args() # For the parsing_net_choice
         # if temp.parsing_net_choice == 'ParsingNet':
@@ -84,19 +81,6 @@ class Painet(BaseModel): # which is only for parsing models
         # define the CLIP
         if opt.use_text:
             self.model_clip, _ = clip.load("ViT-B/32", device= 'cuda')
-            assert self.model_clip.training is False
-            
-        if opt.clip_finetune_choice == 'CLIP_adapter':
-            prompt = 'The sleeve length of the upper clothing of the person is {}'
-            shape_text = ["sleeveless", "short-sleeve", "medium-sleeve", "long-sleeve", "not long-sleeve", "not visible"]
-            if opt.use_prompt:
-                shape_text = [prompt.format(c) for c in shape_text]
-            self.net_adapter = network.define_clip_adapter(opt, cfg= None, clip_model= self.model_clip, ratio= opt.clip_adapter_ratio, prompts= shape_text)
-            self.classification_loss = nn.CrossEntropyLoss()
-            
-            for name, param in self.net_adapter.named_parameters():
-                if 'adapter' not in name:
-                    param.requires_grad_(False)  
         
         trained_list = ['parnet']
         for k,v in self.net_G.named_parameters():
@@ -120,12 +104,6 @@ class Painet(BaseModel): # which is only for parsing models
                                                filter(lambda p: p.requires_grad, self.net_G.parameters())),
                                                lr=opt.lr, betas=(0.9, 0.999))
             self.optimizers.append(self.optimizer_G)
-            
-            self.optimizer_adapter = torch.optim.SGD(itertools.chain(
-                                               filter(lambda p: p.requires_grad, self.net_adapter.parameters())),
-                                               lr=opt.lr_adapter)
-            self.optimizers.append(self.optimizer_adapter)
-            
 
 
         # load the pre-trained model and schedulers
@@ -148,9 +126,6 @@ class Painet(BaseModel): # which is only for parsing models
             else:
                 self.visual_names = ['input_BP2', 'parsav', 'label_P2']
             self.model_names = ['G'] #
-            if opt.clip_finetune_choice == 'CLIP_adapter':
-                self.model_names.append('adapter')
-                self.loss_names.append('clip_match')
                 
         elif stage_choice == 'stage_12':
             
@@ -159,10 +134,8 @@ class Painet(BaseModel): # which is only for parsing models
             
             self.visual_names = ['input_P1','input_P2', 'img_gen', 'parsav', 'label_P2']
             self.model_names = ['G','D']
-            if opt.clip_finetune_choice == 'CLIP_adapter':
-                self.model_names.append('adapter')
-                self.loss_names.append('clip_match')
             
+    
     def set_input(self, input):
         # move to GPU and change data types
         # self.input = input
@@ -175,9 +148,6 @@ class Painet(BaseModel): # which is only for parsing models
         else:
             input_P1, self.show_TXT = input['P1'], input['TEXT']
             input_P2, input_BP2, input_SPL2, label_P2 = input['P2'], input['BP2'], input['SPL2'], input['label_P2']
-            
-        if self.opt.clip_finetune_choice == 'CLIP_adapter':
-             shape_label = input['shape_label']
 
         if len(self.gpu_ids) > 0:
             self.input_P1 = input_P1.cuda(self.gpu_ids[0])
@@ -187,14 +157,7 @@ class Painet(BaseModel): # which is only for parsing models
             self.input_BP2 = input_BP2.cuda(self.gpu_ids[0])  
             self.input_SPL2 = input_SPL2.cuda(self.gpu_ids[0])  
             self.label_P2 = label_P2.cuda(self.gpu_ids[0])
-            self.shape_label = shape_label.cuda(self.gpu_ids[0])
-            
-            if self.opt.clip_finetune_choice == 'wo':
-                self.input_TXT1 = self.model_clip.encode_text(clip.tokenize(self.show_TXT).cuda()) if hasattr(self, 'model_clip') else None
-            elif self.opt.clip_finetune_choice == 'CLIP_adapter':
-                text_features = self.model_clip.encode_text(clip.tokenize(self.show_TXT).cuda())
-                x = self.net_adapter.adapter(text_features.float())
-                self.input_TXT1 = self.opt.clip_adapter_ratio * x + (1 - self.opt.clip_adapter_ratio) * text_features.float()
+            self.input_TXT1 = self.model_clip.encode_text(clip.tokenize(self.show_TXT).cuda()) if hasattr(self, 'model_clip') else None
             
 
         self.image_paths=[]
@@ -235,11 +198,6 @@ class Painet(BaseModel): # which is only for parsing models
 
     def forward(self):
         """Run forward processing to get the inputs"""
-        if self.opt.clip_finetune_choice == 'CLIP_adapter':
-            logits = self.net_adapter(self.input_P1)
-            self.class_accuracy = accuracy.compute_accuracy(logits, self.shape_label)[0].item()
-            self.loss_clip_match = self.classification_loss(logits, self.shape_label)
-            
         self.parsav = self.net_G(None, None, self.input_BP1, self.input_BP2, self.input_SPL1, self.input_TXT1)
       
 
@@ -268,10 +226,8 @@ class Painet(BaseModel): # which is only for parsing models
         self.forward()
         
         self.optimizer_G.zero_grad()
-        self.optimizer_adapter.zero_grad()
         self.backward_G()
         self.optimizer_G.step()
-        self.optimizer_adapter.step()
         
 class CrossEntropyLoss2d(nn.Module):
     def __init__(self, weight=None, size_average=True, ignore_index=255):
