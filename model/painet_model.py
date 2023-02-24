@@ -222,7 +222,13 @@ class Painet(BaseModel): # which is only for parsing models
         #print(self.input_SPL2.min(), self.input_SPL2.max(), self.parsav.min(), self.parsav.max())
         self.loss_par = self.parLoss(self.parsav,label_P2)# * 20. 
         self.loss_par1 = self.L1loss(self.parsav, self.input_SPL2)  * 100
-        ## test flow ##
+        
+        # clip_classification_loss
+        if self.opt.clip_finetune_choice == 'CLIP_adapter':
+            logits = self.net_adapter(self.input_P1)
+            self.class_accuracy = accuracy.compute_accuracy(logits, self.shape_label)[0].item()
+            self.loss_clip_match = self.classification_loss(logits, self.shape_label)
+        
         
         """
         self.save_results(img_gen, data_name='vis')
